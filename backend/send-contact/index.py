@@ -1,6 +1,7 @@
 import json
 import smtplib
 import os
+import psycopg2
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Dict, Any
@@ -70,16 +71,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     smtp_password = os.environ.get('SMTP_PASSWORD')
     contact_email = os.environ.get('CONTACT_EMAIL')
     
-    if not all([smtp_host, smtp_user, smtp_password, contact_email]):
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'error': 'Email configuration missing'})
-        }
-    
     msg = MIMEMultipart('alternative')
     msg['Subject'] = f'Новая заявка с сайта от {contact.name}'
     msg['From'] = smtp_user
@@ -140,33 +131,47 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     msg.attach(part1)
     msg.attach(part2)
     
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_password)
-            server.send_message(msg)
-        
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({
-                'success': True,
-                'message': 'Заявка успешно отправлена'
-            })
-        }
-    except Exception as e:
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({
-                'success': False,
-                'error': 'Failed to send email',
-                'details': str(e)
-            })
-        }
+    database_url = os.environ.get('DATABASE_URL')
+    lead_id = None
+    
+    if database_url:
+        try:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO leads (name, phone, email, status) VALUES (%s, %s, %s, %s) RETURNING id",
+                (contact.name, contact.phone, contact.email, 'new')
+            )
+            lead_id = cur.fetchone()[0]
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as db_error:
+            pass
+    
+    email_sent = False
+    email_error = None
+    
+    if all([smtp_host, smtp_user, smtp_password, contact_email]):
+        try:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+            email_sent = True
+        except Exception as e:
+            email_error = str(e)
+    
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        },
+        'body': json.dumps({
+            'success': True,
+            'message': 'Заявка успешно сохранена',
+            'lead_id': lead_id,
+            'email_sent': email_sent
+        })
+    }
