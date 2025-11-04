@@ -3,15 +3,69 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
 import Icon from '@/components/ui/icon';
 
 function Index() {
   const [activeSection, setActiveSection] = useState('home');
+  const [formData, setFormData] = useState({ name: '', phone: '', email: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
   const scrollToSection = (id: string) => {
     setActiveSection(id);
     const element = document.getElementById(id);
     element?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.phone || !formData.email) {
+      toast({
+        title: 'Ошибка',
+        description: 'Пожалуйста, заполните все поля',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch('https://functions.poehali.dev/d7e41c14-bf02-461c-8d94-ed5329c82630', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        toast({
+          title: 'Успешно!',
+          description: 'Ваша заявка отправлена. Мы свяжемся с вами в ближайшее время.'
+        });
+        setFormData({ name: '', phone: '', email: '' });
+      } else {
+        throw new Error(data.error || 'Ошибка отправки');
+      }
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось отправить заявку. Попробуйте позже или позвоните нам.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const services = [
@@ -687,39 +741,63 @@ function Index() {
                       </div>
                     </div>
 
-                    <div className="space-y-4">
+                    <form onSubmit={handleSubmit} className="space-y-4">
                       <div>
                         <label className="text-sm font-medium mb-2 block">Ваше имя</label>
                         <input
                           type="text"
+                          name="name"
+                          value={formData.name}
+                          onChange={handleInputChange}
                           placeholder="Иван Иванов"
-                          className="w-full px-4 py-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                          required
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                         />
                       </div>
                       <div>
                         <label className="text-sm font-medium mb-2 block">Телефон</label>
                         <input
                           type="tel"
-                          placeholder="+7 (___) ___-__-__"
-                          className="w-full px-4 py-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                          placeholder="+7 (999) 123-45-67"
+                          required
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                         />
                       </div>
                       <div>
                         <label className="text-sm font-medium mb-2 block">Email</label>
                         <input
                           type="email"
+                          name="email"
+                          value={formData.email}
+                          onChange={handleInputChange}
                           placeholder="example@mail.ru"
-                          className="w-full px-4 py-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                          required
+                          disabled={isSubmitting}
+                          className="w-full px-4 py-3 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                         />
                       </div>
-                      <Button className="w-full" size="lg">
-                        <Icon name="Send" className="mr-2 h-5 w-5" />
-                        Отправить заявку
+                      <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
+                        {isSubmitting ? (
+                          <>
+                            <Icon name="Loader2" className="mr-2 h-5 w-5 animate-spin" />
+                            Отправка...
+                          </>
+                        ) : (
+                          <>
+                            <Icon name="Send" className="mr-2 h-5 w-5" />
+                            Отправить заявку
+                          </>
+                        )}
                       </Button>
                       <p className="text-xs text-muted-foreground text-center">
                         Нажимая кнопку, вы соглашаетесь с политикой конфиденциальности
                       </p>
-                    </div>
+                    </form>
                   </div>
                 </CardContent>
               </Card>
